@@ -2,26 +2,9 @@ import { NextResponse } from "next/server";
 import { callOrthogonal } from "@/lib/orthogonal";
 import { isValidLinkedInProfileUrl } from "@/lib/validation";
 import { guardRequest, type GuardBody } from "@/lib/security/guard";
+import type { EnrichData, EnrichLink, EnrichSource } from "@/types/enrich";
 
 const MAX_URL_LEN = 500;
-
-export interface EnrichLink {
-  label: string;
-  url: string;
-}
-
-export type EnrichSource = "apollo" | "bytemine" | "contactout" | "none";
-
-export interface EnrichResult {
-  emails: string[];
-  phones: string[];
-  source: EnrichSource;
-  // Extra profile context surfaced alongside the contact details.
-  company: string | null;
-  position: string | null;
-  location: string | null;
-  links: EnrichLink[];
-}
 
 // What each provider step contributes to the merged result.
 interface ProviderResult {
@@ -240,8 +223,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid LinkedIn profile URL." }, { status: 400 });
   }
 
-  // Input is valid and a call will be made — count it against the daily cap.
-  await guard.recordSpend();
+  // Input is valid and a call will be made — reserve its cost against the cap.
+  const capErr = await guard.reserveSpend();
+  if (capErr) return capErr;
 
   // Cheap → rich → last-resort. Each step fires only if no email yet, and a
   // step that throws degrades to the next instead of failing the request.
@@ -257,12 +241,16 @@ export async function POST(request: Request) {
   let position: string | null = null;
   let location: string | null = null;
   let phones: string[] = [];
-  let links: EnrichLink[] = [];
+  const links: EnrichLink[] = [];
   let phoneSource: EnrichSource = "none";
 
+  const seenLinks = new Set<string>();
   const mergeLinks = (next: EnrichLink[]) => {
-    const seen = new Set(links.map((l) => l.url));
-    for (const l of next) if (!seen.has(l.url)) (seen.add(l.url), links.push(l));
+    for (const l of next) {
+      if (seenLinks.has(l.url)) continue;
+      seenLinks.add(l.url);
+      links.push(l);
+    }
   };
 
   for (const [name, lookup] of steps) {
@@ -282,7 +270,7 @@ export async function POST(request: Request) {
 
     if (r.emails.length) {
       console.log(`[enrich] ${name}: email found`);
-      return NextResponse.json<EnrichResult>({
+      return NextResponse.json<EnrichData>({
         emails: r.emails,
         phones,
         source: name,
@@ -296,7 +284,7 @@ export async function POST(request: Request) {
 
   // No email from any provider — still return whatever context/phones we got.
   console.log("[enrich] no email found");
-  return NextResponse.json<EnrichResult>({
+  return NextResponse.json<EnrichData>({
     emails: [],
     phones,
     source: phones.length || links.length ? phoneSource : "none",

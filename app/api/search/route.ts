@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { isValidJobUrl } from "@/lib/validation";
-import { resolveJob, normalizeCompany } from "@/lib/jobResolver";
+import { resolveJob } from "@/lib/jobResolver";
+import { normalizeCompany } from "@/lib/domains";
+import { isQuotaError, QUOTA_MSG } from "@/lib/orthogonal";
 import { guardRequest, type GuardBody } from "@/lib/security/guard";
 import { findSimilarPeople, findRecruiters, simplifyJobTitle } from "@/lib/people";
 
@@ -65,8 +67,9 @@ export async function POST(request: Request) {
         ? body.jobLocation.trim().slice(0, MAX_FIELD_LEN)
         : null;
     source = "preset";
-    // A people-only search will run — count it against the daily cap.
-    await guard.recordSpend();
+    // A people-only search will run — reserve its cost against the daily cap.
+    const capErr = await guard.reserveSpend();
+    if (capErr) return capErr;
   } else {
     const rawUrl = typeof body.jobUrl === "string" ? body.jobUrl.trim() : "";
     if (!rawUrl || rawUrl.length > MAX_URL_LEN || !isValidJobUrl(rawUrl)) {
@@ -76,8 +79,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Input is valid and a call will be made — count it against the daily cap.
-    await guard.recordSpend();
+    // Input is valid and a call will be made — reserve its cost against the cap.
+    const capErr = await guard.reserveSpend();
+    if (capErr) return capErr;
 
     // Step 1: Resolve the URL → { jobTitle, companyName, domain } (any source).
     let resolved;
@@ -85,6 +89,9 @@ export async function POST(request: Request) {
       resolved = await resolveJob(rawUrl);
     } catch (err) {
       console.error("[search] Job resolution failed:", err);
+      if (isQuotaError(err)) {
+        return NextResponse.json({ error: QUOTA_MSG }, { status: 503 });
+      }
       return NextResponse.json({ error: UNREADABLE_MSG }, { status: 502 });
     }
 

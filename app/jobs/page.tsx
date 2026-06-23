@@ -6,9 +6,10 @@ import { apiPost, primeSecurity, errorMessage } from "@/lib/security/client";
 import { JobSearchForm } from "@/components/jobs/JobSearchForm";
 import { JobListingCard } from "@/components/jobs/JobListingCard";
 import { ResultsSection } from "@/components/ResultsSection";
-import { EnrichDrawer, EnrichData } from "@/components/EnrichDrawer";
+import { EnrichDrawer } from "@/components/EnrichDrawer";
 import { PipelineProgress } from "@/components/PipelineProgress";
 import type { PersonData } from "@/components/PersonCard";
+import type { EnrichData } from "@/types/enrich";
 import type { JobListing, JobSearchParams, JobSearchResult } from "@/types/job";
 
 // People + recruiters surfaced for one listing (the v1 /api/search response).
