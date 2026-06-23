@@ -30,6 +30,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async redirects() {
+    // Role-first search is now the home page; /jobs was its old path.
+    return [{ source: "/jobs", destination: "/", permanent: true }];
+  },
 };
 
 export default nextConfig;

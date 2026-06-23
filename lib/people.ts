@@ -247,27 +247,6 @@ export function findRecruiters(input: FinderInput): Promise<Person[]> {
   return waterfall("recruiters", steps);
 }
 
-// Alumni from a given school at the company — target 5.
-export function findAlumni(input: FinderInput & { school: string }): Promise<Person[]> {
-  const { company, domain, school } = input;
-  const LIMIT = 5;
-  // Domain-first, same as the other finders: match alumni at the exact domain
-  // first, then fall back to the company name only if that found nobody.
-  const steps: Array<() => Promise<Person[]>> = [];
-  if (domain)
-    steps.push(() =>
-      contactOutSearch({ domain: [domain], education: [school] }).then((r) =>
-        fromContactOut(r, LIMIT)
-      )
-    );
-  steps.push(() =>
-    contactOutSearch({ company: [company], education: [school] }).then((r) =>
-      fromContactOut(r, LIMIT)
-    )
-  );
-  return waterfall("alumni", steps);
-}
-
 /* ── Helpers shared with the search route ────────────────────────────── */
 
 // Strip seasonal/intern decorations so "Fall 2026: Employer Brand Intern" →
