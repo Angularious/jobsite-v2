@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "JOB ENRICH — who to talk to",
-  description: "Paste a job posting. Get the people behind it.",
+  title: "Job Search — meet the team behind any role",
+  description: "Search a role, find live job postings, and meet the people and recruiters behind them.",
 };
 
 export default function RootLayout({

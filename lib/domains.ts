@@ -1,10 +1,10 @@
 import { getDomain } from "tldts";
 
 /**
- * Shared domain / company-name helpers used by both the v1 URL resolver
- * (`lib/jobResolver.ts`) and the v2 role-first search (`lib/jobs/searchJobs.ts`).
- * Previously these lived in both files in slightly-diverging copies — this is the
- * single source of truth.
+ * Shared domain / company-name helpers. Used by the role-first job search
+ * (`lib/jobs/searchJobs.ts`, the Serper web fallback) and the people-finder
+ * route (company-name normalization). Single source of truth for ATS/host
+ * detection and apex-domain reduction.
  */
 
 // Hosts that are ATS / job-board infrastructure — never a hiring company's own
@@ -40,12 +40,6 @@ export function hostFromUrl(raw: unknown): string | null {
 export function normalizeCompanyDomain(raw: unknown): string | null {
   const host = hostFromUrl(raw);
   return host && !isInfraHost(host) ? host : null;
-}
-
-/** The company's own domain from a candidate URL/host, falling back to the page
- *  host — but never an ATS, social, or aggregator host. */
-export function pickDomain(candidate: unknown, pageUrl: string | null): string | null {
-  return normalizeCompanyDomain(candidate) ?? normalizeCompanyDomain(pageUrl);
 }
 
 // Unambiguous legal forms — safe to strip even without a comma.
