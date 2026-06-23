@@ -7,9 +7,10 @@ import { ResultsSection } from "@/components/ResultsSection";
 import { AlumniFinder } from "@/components/AlumniFinder";
 import { SampleResults } from "@/components/SampleResults";
 import { HiringAd } from "@/components/HiringAd";
-import { EnrichDrawer, EnrichData } from "@/components/EnrichDrawer";
+import { EnrichDrawer } from "@/components/EnrichDrawer";
 import { PipelineProgress } from "@/components/PipelineProgress";
 import type { PersonData } from "@/components/PersonCard";
+import type { EnrichData } from "@/types/enrich";
 
 interface SearchResults {
   jobTitle: string;

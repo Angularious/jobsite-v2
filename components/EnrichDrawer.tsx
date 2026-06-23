@@ -4,26 +4,12 @@ import { useEffect } from "react";
 import { X } from "lucide-react";
 import { PersonData } from "./PersonCard";
 import { PipelineProgress } from "./PipelineProgress";
+import type { EnrichData } from "@/types/enrich";
 
 const ENRICH_STEPS = [
   { label: "Searching for their email", delay: 0 },
   { label: "Pulling their full profile", delay: 1400 },
 ];
-
-export interface EnrichLink {
-  label: string;
-  url: string;
-}
-
-export interface EnrichData {
-  emails: string[];
-  phones: string[];
-  source: "apollo" | "bytemine" | "contactout" | "none";
-  company: string | null;
-  position: string | null;
-  location: string | null;
-  links: EnrichLink[];
-}
 
 interface EnrichDrawerProps {
   person: PersonData | null;

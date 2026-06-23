@@ -1,4 +1,3 @@
-import { getDomain } from "tldts";
 import { callOrthogonal } from "@/lib/orthogonal";
 
 export interface Person {
@@ -294,25 +293,4 @@ function titleVariants(title: string): string[] {
     if (head.length >= 3) variants.push(head);
   }
   return variants.filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
-}
-
-// Best-effort company domain from the job extraction payload — powers the
-// alumni domain fallback. Returns null if no non-LinkedIn host is found.
-export function extractDomain(out: Record<string, unknown>): string | null {
-  const candidates = [
-    out.company_website,
-    out.company_domain,
-    out.website,
-    out.domain,
-    out.company_url,
-    out.apply_url,
-  ];
-  for (const c of candidates) {
-    if (typeof c !== "string" || !c.trim()) continue;
-    // PSL-reduce to the apex (careers.acme.com → acme.com) so the domain is one
-    // a people provider can actually match — same rule as jobResolver.
-    const host = getDomain(c.startsWith("http") ? c : `https://${c}`);
-    if (host && !host.endsWith("linkedin.com")) return host;
-  }
-  return null;
 }

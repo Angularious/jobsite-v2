@@ -1,6 +1,6 @@
-import { getDomain } from "tldts";
 import { callOrthogonal } from "./orthogonal";
 import { canonicalizeLinkedInJobUrl, isLinkedInHost } from "./validation";
+import { normalizeCompany, pickDomain } from "./domains";
 
 /**
  * Turns ANY job posting / careers URL into the only three things the rest of
@@ -24,58 +24,6 @@ export interface ResolvedJob {
   domain: string | null;
   jobLocation: string | null;
   source: "linkedin" | "jsonld" | "llm";
-}
-
-// Hosts that are ATS/job-board infrastructure or social/aggregator sites, not
-// the hiring company — never treat these as the company's own domain.
-const ATS_HOSTS =
-  /(^|\.)(myworkdayjobs\.com|bamboohr\.com|greenhouse\.io|gem\.com|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|icims\.com|jobvite\.com|taleo\.net|successfactors\.com|paylocity\.com|eddy\.com|jobs\.[a-z]+)$/i;
-const NON_COMPANY_HOSTS =
-  /(^|\.)(linkedin\.com|twitter\.com|x\.com|facebook\.com|instagram\.com|crunchbase\.com|glassdoor\.com|indeed\.com|youtube\.com)$/i;
-
-// Unambiguous legal forms — safe to strip even without a comma.
-const LEGAL_HARD =
-  /[,.]?\s+(incorporated|inc|llc|l\.l\.c\.|ltd|limited|corp|corporation|gmbh|plc|pte\.?\s*ltd|pty\.?\s*ltd|llp|s\.?a\.?r\.?l\.?|srl)\.?$/i;
-// Words that are often part of a real brand ("The Walt Disney Company", a spa,
-// "<X> Co") — only strip when clearly a legal suffix, i.e. set off by a comma.
-const LEGAL_SOFT = /,\s*(co|company|spa|ag|s\.?a\.?|b\.?v\.?|n\.?v\.?|kk|lp)\.?$/i;
-
-/** Strip trailing legal suffixes so "Crocs, Inc." → "Crocs" — the people
- *  providers index companies by common name, not legal entity. Ambiguous
- *  words (Co/Company/Spa/…) are only stripped after a comma so brand names
- *  like "The Walt Disney Company" survive. */
-export function normalizeCompany(raw: string): string {
-  let name = raw.replace(/\s+/g, " ").trim();
-  // Suffixes can stack ("Foo, Inc. LLC"); strip repeatedly.
-  for (let i = 0; i < 3; i++) {
-    const next = name.replace(LEGAL_HARD, "").replace(LEGAL_SOFT, "").trim();
-    if (next === name || !next) break;
-    name = next;
-  }
-  return name;
-}
-
-/** The company's own domain from a candidate URL/host, falling back to the
- *  page host — but never an ATS, social, or aggregator host. */
-function pickDomain(candidate: unknown, pageUrl: string | null): string | null {
-  const d = hostFromUrl(candidate);
-  if (d && !ATS_HOSTS.test(d) && !NON_COMPANY_HOSTS.test(d)) return d;
-  const ph = pageUrl ? hostFromUrl(pageUrl) : null;
-  if (ph && !ATS_HOSTS.test(ph) && !NON_COMPANY_HOSTS.test(ph)) return ph;
-  return null;
-}
-
-/** Best-effort registrable (apex) domain from a URL or company website string.
- *  Backed by the Public Suffix List (tldts), so "careers.sharkninja.com" →
- *  "sharkninja.com", "jobs.acme.co.uk" → "acme.co.uk", etc. People providers
- *  index companies by their apex marketing domain, never a careers/jobs/apply
- *  subdomain — collapsing to the registrable domain here is what makes the
- *  domain-first search actually match. Handles multi-part TLDs correctly, so
- *  there's no hand-maintained list of subdomain prefixes to keep in sync. */
-function hostFromUrl(raw: unknown): string | null {
-  if (typeof raw !== "string" || !raw.trim()) return null;
-  const withProto = raw.startsWith("http") ? raw : `https://${raw}`;
-  return getDomain(withProto) || null;
 }
 
 /* ── LinkedIn branch (Edges) ─────────────────────────────────────────── */

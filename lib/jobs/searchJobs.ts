@@ -1,5 +1,5 @@
-import { getDomain } from "tldts";
 import { callOrthogonal } from "@/lib/orthogonal";
+import { normalizeCompanyDomain } from "@/lib/domains";
 import type {
   JobListing,
   JobSalary,
@@ -39,25 +39,6 @@ function feedPath(params: JobSearchParams): string {
   if (params.board === "jb") return JB_PATH;
   if (params.board === "ats") return ATS_PATH;
   return params.employmentType?.toUpperCase() === "INTERN" ? JB_PATH : ATS_PATH;
-}
-
-// ATS / job-board infrastructure hosts — never a company's own domain. Mirrors
-// (a subset of) lib/jobResolver.ts's private ATS_HOSTS. Fantastic Jobs already
-// hands us a clean apex in `domain_derived`, so this is a defensive backstop
-// for the rare row where it leaks a board host.
-// TODO: jobResolver.ts has near-identical ATS-host + apex-domain logic; worth
-// consolidating into one shared lib/domains.ts when v1 + v2 are unified.
-const ATS_HOSTS =
-  /(^|\.)(myworkdayjobs\.com|bamboohr\.com|greenhouse\.io|gem\.com|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|icims\.com|jobvite\.com|taleo\.net|successfactors\.com|paylocity\.com|eddy\.com)$/i;
-
-/** Clean employer domain or null. Reduces to the registrable apex (so a stray
- *  `careers.x.com` collapses to `x.com`) and rejects ATS/board hosts. */
-function normalizeCompanyDomain(raw: unknown): string | null {
-  if (typeof raw !== "string" || !raw.trim()) return null;
-  const withProto = raw.startsWith("http") ? raw : `https://${raw}`;
-  const apex = getDomain(withProto);
-  if (!apex || ATS_HOSTS.test(apex)) return null;
-  return apex;
 }
 
 /* ── Raw response shape (only the fields we read) ────────────────────── */

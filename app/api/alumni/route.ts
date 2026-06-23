@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { findAlumni } from "@/lib/people";
 import { isValidSchool } from "@/lib/validation";
 import { guardRequest, type GuardBody } from "@/lib/security/guard";
+import { isQuotaError, QUOTA_MSG } from "@/lib/orthogonal";
 
 const MAX_COMPANY_LEN = 200;
 const MAX_DOMAIN_LEN = 255;
@@ -37,14 +38,18 @@ export async function POST(request: Request) {
     );
   }
 
-  // Input is valid and a call will be made — count it against the daily cap.
-  await guard.recordSpend();
+  // Input is valid and a call will be made — reserve its cost against the cap.
+  const capErr = await guard.reserveSpend();
+  if (capErr) return capErr;
 
   try {
     const alumni = await findAlumni({ company, domain, school });
     return NextResponse.json({ alumni, alumniError: false });
   } catch (err) {
     console.error("[alumni] Search failed:", err);
+    if (isQuotaError(err)) {
+      return NextResponse.json({ error: QUOTA_MSG, alumni: [], alumniError: true }, { status: 503 });
+    }
     return NextResponse.json({ alumni: [], alumniError: true }, { status: 502 });
   }
 }

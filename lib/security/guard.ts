@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { checkRateLimit, retryAfter } from "./rateLimit";
-import { withinCap, recordSpend, capResetAt } from "./spendCap";
+import { withinCap, reserveSpend, capResetAt } from "./spendCap";
 import { verifyRequestToken, verifyPageStamp } from "./tokens";
 
 /* ── Per-step config ──────────────────────────────────────────────
@@ -44,8 +44,19 @@ export interface GuardBody {
 }
 
 type GuardResult =
-  | { ok: true; recordSpend: () => Promise<void> }
+  | { ok: true; reserveSpend: () => Promise<NextResponse | null> }
   | { ok: false; response: NextResponse };
+
+// Daily spend cap hit — 503 for everyone until reset. Don't reveal the cap.
+const capExceeded = () =>
+  NextResponse.json(
+    {
+      error: "service_unavailable",
+      message: "This demo has reached its daily usage limit. Please try again tomorrow.",
+      resetAt: capResetAt(),
+    },
+    { status: 503 }
+  );
 
 const BOT_UA =
   /(^$)|curl\/|wget\/|python-requests|go-http-client|libwww|scrapy|httpx|java\/|okhttp|node-fetch|axios\/|headlesschrome|phantomjs/i;
@@ -113,8 +124,10 @@ const forbidden = (message: string) =>
 
 /**
  * Run all Level 1 gates for a step. Call at the very top of an API route,
- * before any Orthogonal call. On success, call the returned recordSpend()
- * AFTER a successful upstream call so the daily cap reflects real usage.
+ * before any Orthogonal call. On success, call the returned reserveSpend()
+ * AFTER validating input and BEFORE the upstream call: it atomically reserves
+ * the step's cost against the daily cap and returns a 503 to send back if the
+ * cap is now exceeded (else null).
  */
 export async function guardRequest(
   request: Request,
@@ -155,19 +168,11 @@ export async function guardRequest(
     }
   }
 
-  // 5. Global daily spend cap (503 for everyone when hit). Don't reveal the cap.
+  // 5. Global daily spend cap — early, friendly reject before doing any work.
+  // This is a cheap read; the authoritative atomic reserve happens when the
+  // route calls reserveSpend() after input validation passes.
   if (!(await withinCap(cfg.cost))) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        {
-          error: "service_unavailable",
-          message: "This demo has reached its daily usage limit. Please try again tomorrow.",
-          resetAt: capResetAt(),
-        },
-        { status: 503 }
-      ),
-    };
+    return { ok: false, response: capExceeded() };
   }
 
   // 6. Per-visitor, per-step daily rate limit.
@@ -188,5 +193,12 @@ export async function guardRequest(
     };
   }
 
-  return { ok: true, recordSpend: () => recordSpend(cfg.cost) };
+  // Authoritative spend accounting: the route calls this AFTER validating input
+  // (so invalid requests don't burn the cap) and BEFORE the upstream call. It
+  // atomically reserves the step's cost; if that pushes today's total over the
+  // cap, it returns a 503 the route should return immediately, else null.
+  return {
+    ok: true,
+    reserveSpend: async () => ((await reserveSpend(cfg.cost)) ? null : capExceeded()),
+  };
 }

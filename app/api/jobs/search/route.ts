@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardRequest, type GuardBody } from "@/lib/security/guard";
 import { searchJobs } from "@/lib/jobs/searchJobs";
+import { isQuotaError, QUOTA_MSG } from "@/lib/orthogonal";
 import type { JobSearchParams } from "@/types/job";
 
 const MAX_FIELD_LEN = 200;
@@ -50,8 +51,9 @@ export async function POST(request: Request) {
   const board =
     body.board === "jb" || body.board === "ats" ? body.board : undefined;
 
-  // Valid input, a paid call will be made — count it against the daily cap.
-  await guard.recordSpend();
+  // Valid input, a paid call will be made — reserve its cost against the cap.
+  const capErr = await guard.reserveSpend();
+  if (capErr) return capErr;
 
   try {
     const result = await searchJobs({
@@ -69,6 +71,9 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (err) {
     console.error("[jobs] search failed:", err);
+    if (isQuotaError(err)) {
+      return NextResponse.json({ error: QUOTA_MSG }, { status: 503 });
+    }
     return NextResponse.json(
       { error: "Couldn't load job listings right now. Try again." },
       { status: 502 }

@@ -5,7 +5,10 @@
  * down — worst case the cap reverts to its old soft per-instance behavior.
  *
  * Last line of defense: if rate limiting is bypassed, this stops the financial
- * bleed.
+ * bleed. The authoritative check is `reserveSpend()`, which check-and-increments
+ * ATOMICALLY (one locked Postgres call) so concurrent requests can't race past
+ * the cap. `withinCap()` is a cheap read used only for an early, friendly reject
+ * at the guard before any work is done.
  */
 import { getSupabase } from "./supabase";
 
@@ -32,13 +35,15 @@ export function spendCapUsd(): number {
   return Number.isFinite(v) && v > 0 ? v : 40;
 }
 
-/** True if adding `costUsd` would stay within today's cap. */
+/** Cheap, non-authoritative read: would `costUsd` fit under today's cap right
+ *  now? Used by the guard for an early 503 before doing any work. The real
+ *  enforcement is the atomic `reserveSpend()`. */
 export async function withinCap(costUsd: number): Promise<boolean> {
   const sb = getSupabase();
   if (sb) {
     try {
       const { data, error } = await sb
-        .from("jobenrich_daily_spend")
+        .from("jobsitev2_daily_spend")
         .select("usd")
         .eq("day", todayUTC())
         .maybeSingle();
@@ -52,19 +57,33 @@ export async function withinCap(costUsd: number): Promise<boolean> {
   return dailySpend.usd + costUsd <= spendCapUsd();
 }
 
-export async function recordSpend(costUsd: number): Promise<void> {
+/**
+ * Atomically reserve `costUsd` against today's cap. Returns true if it fit
+ * under the cap (and was recorded), false if it would exceed it. The
+ * check-and-increment is a single locked Postgres call, so N concurrent
+ * requests can't all pass a stale "under cap" read and overshoot. Falls back to
+ * the in-memory counter when Supabase isn't configured or errors.
+ */
+export async function reserveSpend(costUsd: number): Promise<boolean> {
   const sb = getSupabase();
   if (sb) {
     try {
-      const { error } = await sb.rpc("jobenrich_record_spend", { p_day: todayUTC(), p_cost: costUsd });
+      const { data, error } = await sb.rpc("jobsitev2_try_reserve_spend", {
+        p_day: todayUTC(),
+        p_cost: costUsd,
+        p_cap: spendCapUsd(),
+      });
       if (error) throw error;
-      return;
+      const row = Array.isArray(data) ? data[0] : data;
+      return typeof row === "boolean" ? row : Boolean(row?.allowed ?? row);
     } catch (err) {
-      console.error("[spendCap] Supabase increment failed, using in-memory:", err);
+      console.error("[spendCap] Supabase reserve failed, using in-memory:", err);
     }
   }
   rollover();
+  if (dailySpend.usd + costUsd > spendCapUsd()) return false;
   dailySpend.usd += costUsd;
+  return true;
 }
 
 /** Next midnight UTC (when the cap resets). */
