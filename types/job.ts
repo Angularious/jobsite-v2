@@ -53,8 +53,21 @@ export interface JobSearchParams {
   board?: "ats" | "jb";
 }
 
+/** A raw web search result from the Serper Google fallback, surfaced only when
+ *  the structured feed returns nothing. These are plain links (LinkedIn/Indeed/
+ *  Greenhouse/aggregators), NOT enriched listings — no company/apply structure. */
+export interface WebResult {
+  title: string;
+  url: string;
+  snippet: string | null;
+  source: string | null; // host, e.g. "linkedin.com"
+}
+
 export interface JobSearchResult {
   jobs: JobListing[];
   nextCursor: string | null; // last job id when a full page came back, else null
   count: number;
+  // When `jobs` is empty, the Serper web fallback may return raw web links so
+  // the user still gets somewhere to go. Absent/empty when there were listings.
+  webResults?: WebResult[];
 }
