@@ -33,6 +33,38 @@ const DEFAULT_TIME_FRAME = "7d";
 const ATS_PATH = "/v1/active-ats";
 const JB_PATH = "/v1/active-jb";
 
+// Fantastic Jobs matches the `title` filter fairly literally, so a typed-in
+// abbreviation ("GTM") matches almost no posting titles (they read "Go-to-Market
+// Intern" / "Growth Marketing Intern"). Expand common abbreviations to the
+// phrase recruiters actually title roles with. Whole-word, case-insensitive;
+// only high-confidence, unambiguous abbreviations are listed.
+const ABBREVIATIONS: Record<string, string> = {
+  gtm: "go to market",
+  swe: "software engineer",
+  sde: "software development engineer",
+  sre: "site reliability engineer",
+  pm: "product manager",
+  tpm: "technical program manager",
+  ml: "machine learning",
+  nlp: "natural language processing",
+  ux: "user experience",
+  ui: "user interface",
+  qa: "quality assurance",
+  sdr: "sales development representative",
+  bdr: "business development representative",
+  csm: "customer success manager",
+};
+
+/** Expand known abbreviations in a role query (whole-word, case-insensitive).
+ *  "GTM" → "go to market", "SWE intern" → "software engineer intern". */
+export function expandRole(role: string): string {
+  return role
+    .split(/\s+/)
+    .map((w) => ABBREVIATIONS[w.toLowerCase()] ?? w)
+    .join(" ")
+    .trim();
+}
+
 // Pick the feed: explicit `board` wins; otherwise intern queries go to the job
 // boards (LinkedIn/Wellfound/YC), everything else to the company-ATS feed.
 function feedPath(params: JobSearchParams): string {
@@ -130,7 +162,7 @@ export async function searchJobs(params: JobSearchParams): Promise<JobSearchResu
     time_frame: params.freshness?.trim() || DEFAULT_TIME_FRAME,
     limit: String(limit),
   };
-  if (params.role?.trim()) query.title = params.role.trim();
+  if (params.role?.trim()) query.title = expandRole(params.role.trim());
   if (params.location?.trim()) query.location = params.location.trim();
   if (params.remoteOnly) query.ai_work_arrangement = "Remote OK";
   if (params.employmentType?.trim()) query.ai_employment_type = params.employmentType.trim();

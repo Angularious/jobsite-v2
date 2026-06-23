@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardRequest, type GuardBody } from "@/lib/security/guard";
 import { searchJobs } from "@/lib/jobs/searchJobs";
+import { webSearchJobs } from "@/lib/jobs/webSearch";
 import { isQuotaError, QUOTA_MSG } from "@/lib/orthogonal";
 import type { JobSearchParams } from "@/types/job";
 
@@ -55,18 +56,26 @@ export async function POST(request: Request) {
   const capErr = await guard.reserveSpend();
   if (capErr) return capErr;
 
+  const searchParams: JobSearchParams = {
+    role,
+    location,
+    remoteOnly: body.remoteOnly === true,
+    employmentType,
+    freshness,
+    cursor,
+    board,
+  };
+
   try {
-    const result = await searchJobs({
-      role,
-      location,
-      remoteOnly: body.remoteOnly === true,
-      employmentType,
-      freshness,
-      cursor,
-      board,
-    });
+    const result = await searchJobs(searchParams);
+    // Structured feed came back empty → cheap Serper web fallback ($0.002) so
+    // the user still gets real links. Only on a first page (no cursor paging).
+    if (result.count === 0 && !cursor) {
+      result.webResults = await webSearchJobs(searchParams);
+    }
     console.log(
-      `[jobs] "${role}" @ "${location ?? "anywhere"}" → ${result.count} listings`
+      `[jobs] "${role}" @ "${location ?? "anywhere"}" → ${result.count} listings` +
+        (result.webResults?.length ? `, ${result.webResults.length} web fallback` : "")
     );
     return NextResponse.json(result);
   } catch (err) {
